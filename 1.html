@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Huffman File Compression</title>
+  </head>
+  <body>
+    <h1>Huffman Compression</h1>
+    <h2>Compress File</h2>
+    <input type="file" id="fileInputCompress" />
+    <button onclick="compressAndDownload()">Compress & Download</button>
+
+    <h2>Decompress File</h2>
+    <input type="file" id="fileInputDecompress" />
+    <button onclick="decompressAndDownload()">Decompress & Download</button>
+
+    <script>
+      class BinaryTree {
+        constructor(value, frequency) {
+          this.value = value;
+          this.frequency = frequency;
+          this.left = null;
+          this.right = null;
+        }
+      }
+
+      class Huffmancode {
+        constructor() {
+          this.heap = [];
+          this.code = {};
+          this.reversecode = {};
+        }
+
+        frequencyFromText(text) {
+          const frequ_dict = {};
+          for (let char of text) {
+            frequ_dict[char] = (frequ_dict[char] || 0) + 1;
+          }
+          return frequ_dict;
+        }
+
+        buildHeap(frequencyDict) {
+          for (let key in frequencyDict) {
+            const frequency = frequencyDict[key];
+            const binaryTreeNode = new BinaryTree(key, frequency);
+            this.heap.push(binaryTreeNode);
+          }
+          this.heap.sort((a, b) => a.frequency - b.frequency);
+        }
+
+        buildBinaryTree() {
+          while (this.heap.length > 1) {
+            const binaryTreeNode1 = this.heap.shift();
+            const binaryTreeNode2 = this.heap.shift();
+            const sumOfFreq =
+              binaryTreeNode1.frequency + binaryTreeNode2.frequency;
+            const newNode = new BinaryTree(null, sumOfFreq);
+            newNode.left = binaryTreeNode1;
+            newNode.right = binaryTreeNode2;
+            this.heap.push(newNode);
+            this.heap.sort((a, b) => a.frequency - b.frequency);
+          }
+        }
+
+        buildTreeCodeHelper(root, currBits) {
+          if (!root) return;
+          if (root.value !== null) {
+            this.code[root.value] = currBits;
+            this.reversecode[currBits] = root.value;
+            return;
+          }
+          this.buildTreeCodeHelper(root.left, currBits + "0");
+          this.buildTreeCodeHelper(root.right, currBits + "1");
+        }
+
+        buildTreeCode() {
+          const root = this.heap.shift();
+          this.buildTreeCodeHelper(root, "");
+        }
+
+        buildEncodedText(text) {
+          let encodedText = "";
+          for (let char of text) {
+            encodedText += this.code[char];
+          }
+          return encodedText;
+        }
+
+        buildPaddedText(encodedText) {
+          let paddingValue = 8 - (encodedText.length % 8);
+          for (let i = 0; i < paddingValue; i++) {
+            encodedText += "0";
+          }
+          const paddedInfo = paddingValue.toString(2).padStart(8, "0");
+          return paddedInfo + encodedText;
+        }
+
+        buildByteArray(paddedText) {
+          const array = [];
+          for (let i = 0; i < paddedText.length; i += 8) {
+            const byte = paddedText.slice(i, i + 8);
+            array.push(parseInt(byte, 2));
+          }
+          return array;
+        }
+
+        compress(text) {
+          const frequencyDict = this.frequencyFromText(text);
+          this.buildHeap(frequencyDict);
+          this.buildBinaryTree();
+          this.buildTreeCode();
+          const encodedText = this.buildEncodedText(text);
+          const paddedText = this.buildPaddedText(encodedText);
+          const byteArray = this.buildByteArray(paddedText);
+          return new Uint8Array(byteArray);
+        }
+
+        removePadding(text) {
+          const paddedInfo = text.slice(0, 8);
+          const extraPadding = parseInt(paddedInfo, 2);
+          return text.slice(8, -extraPadding);
+        }
+
+        decompress(byteArray) {
+          let bitString = "";
+          for (let byte of byteArray) {
+            const bits = byte.toString(2).padStart(8, "0");
+            bitString += bits;
+          }
+          const actualText = this.removePadding(bitString);
+          let decodedText = "";
+          let currentBits = "";
+          for (let bit of actualText) {
+            currentBits += bit;
+            if (this.reversecode[currentBits]) {
+              decodedText += this.reversecode[currentBits];
+              currentBits = "";
+            }
+          }
+          return decodedText;
+        }
+      }
+
+      async function compressAndDownload() {
+        const fileInput = document.getElementById("fileInputCompress");
+        const file = fileInput.files[0];
+        if (!file) return alert("No file selected.");
+
+        const reader = new FileReader();
+        reader.onload = async function () {
+          const text = reader.result;
+          const huffman = new Huffmancode();
+          const compressedData = huffman.compress(text);
+          const blob = new Blob([compressedData], {
+            type: "application/octet-stream",
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${file.name.split(".").shift()}_compressed.bin`;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+        reader.readAsText(file);
+      }
+
+      async function decompressAndDownload() {
+        const fileInput = document.getElementById("fileInputDecompress");
+        const file = fileInput.files[0];
+        if (!file) return alert("No file selected.");
+
+        const reader = new FileReader();
+        reader.onload = async function () {
+          const compressedData = new Uint8Array(reader.result);
+          const huffman = new Huffmancode();
+          const decompressedText = huffman.decompress(compressedData);
+          const decodedString = new TextDecoder().decode(decompressedText);
+          const blob = new Blob([decodedString], { type: "text/plain" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${file.name.split(".").shift()}_decompressed.txt`;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    </script>
+  </body>
+</html>
