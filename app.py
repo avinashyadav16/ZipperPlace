@@ -1,102 +1,115 @@
 import os
-import time
 import glob
-from flask import Flask, redirect, render_template, request, send_file
+import shutil
+import subprocess
+from flask import Flask, render_template, request, send_file
 
-# Configure Application
 app = Flask(__name__)
+app.config["FILE_UPLOADS"] = r"C:\Users\avina\OneDrive - Shiv Nadar Foundation\SRM - AP\DOCUMENT\GitHub\ZipperPlace\uploads"
 
-global filename
-global ftype
+
+def clear_directory(directory):
+    filelist = glob.glob(directory + '*')
+    for f in filelist:
+        if os.path.isfile(f):
+            os.remove(f)
+
 
 @app.route("/")
 def home():
-    # Delete old files
-    filelist = glob.glob('uploads/*')
-    for f in filelist:
-        os.remove(f)
-    filelist = glob.glob('downloads/*')
-    for f in filelist:
-        os.remove(f)
+    clear_directory('uploads/')
+    clear_directory('downloads/')
     return render_template("home.html")
 
-app.config["FILE_UPLOADS"] = "/home/ubuntu/HuffmanCoding/uploads"
 
 @app.route("/compress", methods=["GET", "POST"])
 def compress():
-
     if request.method == "GET":
         return render_template("compress.html", check=0)
 
-    else:
-        up_file = request.files["file"]
+    up_file = request.files["file"]
+    if not up_file.filename:
+        return render_template("compress.html", check=-1)
 
-        if len(up_file.filename) > 0:
-            global filename
-            global ftype
-            filename = up_file.filename
-            print(up_file.filename)
-            up_file.save(os.path.join(app.config["FILE_UPLOADS"], filename))
-            os.system('./c uploads/{}'.format(filename))
-            filename = filename[:filename.index(".",1)]
-            ftype = "-compressed.bin"
-            while True:
-                if 'uploads/{}-compressed.bin'.format(filename) in glob.glob('uploads/*-compressed.bin'):
-                    os.system('mv uploads/{}-compressed.bin downloads/'.format(filename))
-                    break
+    filename = up_file.filename
+    up_file_path = os.path.join(app.config["FILE_UPLOADS"], filename)
+    up_file.save(up_file_path)
 
-            return render_template("compress.html", check=1)
+    subprocess.run(['huffcompress.exe', 'uploads/{}'.format(filename)])
 
-        else:
-            print("ERROR")
-            return render_template("compress.html", check=-1)
+    filename = filename.split('.')[0]
+    ftype = "-compressed.bin"
+
+    shutil.move('uploads/{}{}'.format(filename, ftype), 'downloads/')
+
+    return render_template("compress.html", check=1)
+
 
 @app.route("/decompress", methods=["GET", "POST"])
 def decompress():
-
     if request.method == "GET":
         return render_template("decompress.html", check=0)
 
+    up_file = request.files["file"]
+    if not up_file.filename:
+        return render_template("decompress.html", check=-1)
+
+    filename = up_file.filename
+    up_file_path = os.path.join(app.config["FILE_UPLOADS"], filename)
+    up_file.save(up_file_path)
+
+    subprocess.run(['huffdecompress.exe', 'uploads/{}'.format(filename)])
+
+    # Check for decompressed file in uploads directory
+    decompressed_files = [f for f in os.listdir(
+        'uploads/') if f.startswith(filename)]
+
+    if decompressed_files:
+        decompressed_filename = decompressed_files[0]
+        ftype = decompressed_filename.split(
+            '.')[1] if '.' in decompressed_filename else ""
     else:
-        up_file = request.files["file"]
+        print(f"Decompressed file not found for {filename}.")
+        ftype = ""
 
-        if len(up_file.filename) > 0:
-            global filename
-            global ftype
-            filename = up_file.filename
-            print(up_file.filename)
-            up_file.save(os.path.join(app.config["FILE_UPLOADS"], filename))
-            os.system('./d uploads/{}'.format(filename))
-            f = open('uploads/{}'.format(filename), 'rb')
-            ftype = "-decompressed." + (f.read(int(f.read(1)))).decode("utf-8")
-            filename = filename[:filename.index("-",1)]
+    source_file_path = os.path.join(
+        'uploads', decompressed_filename) if decompressed_files else None
+    destination_file_path = 'downloads/'
 
-            while True:
-                if 'uploads/{}{}'.format(filename, ftype) in glob.glob('uploads/*-decompressed.*'):
-                    os.system('mv uploads/{}{} downloads/'.format(filename, ftype))
-                    break
+    if source_file_path:
+        try:
+            shutil.move(source_file_path, os.path.join(
+                destination_file_path, decompressed_filename))
+            print(f"File moved successfully to {
+                  destination_file_path}{decompressed_filename}")
+        except FileNotFoundError as e:
+            print(f"Error moving file: {e}")
+    else:
+        print("File not found for moving.")
 
-            return render_template("decompress.html", check=1)
-
-        else:
-            print("ERROR")
-            return render_template("decompress.html", check=-1)
-
-
-
-
+    return render_template("decompress.html", check=1)
 
 
 @app.route("/download")
 def download_file():
-    global filename
-    global ftype
-    path = "downloads/" + filename + ftype
+    filename = request.args.get('filename')
+    ftype = request.args.get('ftype')
+
+    if filename is None or ftype is None:
+        return "File not found", 404
+
+    # path = os.path.join("downloads", filename + ftype)
+    path = os.path.join(app.config["FILE_UPLOADS"],
+                        "downloads", filename + ftype)
+
+    print("Attempting to download file from path:", path)  # Debugging line
+    print("Current working directory:", os.getcwd())  # Debugging line
+
+    if not os.path.exists(path):
+        return "File not found", 404
+
     return send_file(path, as_attachment=True)
 
 
-
-
-# Restart application whenever changes are made
 if __name__ == "__main__":
-    app.run(debug = True)
+    app.run(host='0.0.0.0', debug=True)
