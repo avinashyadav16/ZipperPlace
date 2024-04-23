@@ -149,18 +149,23 @@
 
         const reader = new FileReader();
         reader.onload = async function () {
-          const text = reader.result;
-          const huffman = new Huffmancode();
-          const compressedData = huffman.compress(text);
-          const blob = new Blob([compressedData], {
-            type: "application/octet-stream",
-          });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${file.name.split(".").shift()}_compressed.bin`;
-          a.click();
-          URL.revokeObjectURL(url);
+          try {
+            const text = reader.result;
+            const huffman = new Huffmancode();
+            const compressedData = huffman.compress(text);
+            const blob = new Blob([compressedData], {
+              type: "application/octet-stream",
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${file.name.split(".").shift()}_compressed.bin`;
+            a.click();
+            URL.revokeObjectURL(url);
+          } catch (error) {
+            console.error("Error compressing the file:", error);
+            alert("Error compressing the file. Please try again.");
+          }
         };
         reader.readAsText(file);
       }
@@ -172,17 +177,21 @@
 
         const reader = new FileReader();
         reader.onload = async function () {
-          const compressedData = new Uint8Array(reader.result);
-          const huffman = new Huffmancode();
-          const decompressedText = huffman.decompress(compressedData);
-          const decodedString = new TextDecoder().decode(decompressedText);
-          const blob = new Blob([decodedString], { type: "text/plain" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${file.name.split(".").shift()}_decompressed.txt`;
-          a.click();
-          URL.revokeObjectURL(url);
+          try {
+            const compressedData = new Uint8Array(reader.result);
+            const huffman = new Huffmancode();
+            const decompressedText = huffman.decompress(compressedData);
+            const blob = new Blob([decompressedText], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${file.name.split(".").shift()}_decompressed.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+          } catch (error) {
+            console.error("Error decompressing the file:", error);
+            alert("Error decompressing the file. Please try again.");
+          }
         };
         reader.readAsArrayBuffer(file);
       }
