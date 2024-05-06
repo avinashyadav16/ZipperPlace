@@ -160,3 +160,7 @@ cython_debug/
 #.idea/
 Test.md
 tempProject.html
+DebuggingProject.html
+sampleTextFile.txt
+ToBeDebug.html
+Huffmancoding.ipynb
